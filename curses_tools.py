@@ -11,7 +11,6 @@ ALT_DOWN_KEY_CODE = ord('s')
 
 def read_controls(canvas):
     """Read keys pressed and returns tuple with controls state."""
-
     rows_direction = columns_direction = 0
     space_pressed = False
 
@@ -43,7 +42,6 @@ def read_controls(canvas):
 
 def draw_frame(canvas, start_row, start_column, text, negative=False):
     """Draw multiline text fragment on canvas, erase text instead of drawing if negative=True is specified."""
-
     rows_number, columns_number = canvas.getmaxyx()
 
     for row, line in enumerate(text.splitlines(), round(start_row)):
@@ -75,8 +73,16 @@ def draw_frame(canvas, start_row, start_column, text, negative=False):
 
 def get_frame_size(text):
     """Calculate size of multiline text fragment, return pair — number of rows and colums."""
-
     lines = text.splitlines()
     rows = len(lines)
     columns = max([len(line) for line in lines])
     return rows, columns
+
+
+def get_centered_frame_coordinates(canvas, frame):
+    """Return upper left corner y, x coordinates of the frame to draw it centered."""
+    frame_height, frame_width = get_frame_size(frame)
+    max_y, max_x = canvas.getmaxyx()
+    start_row = round(max_y / 2 - frame_height / 2)
+    start_column = round(max_x / 2 - frame_width / 2)
+    return start_row, start_column

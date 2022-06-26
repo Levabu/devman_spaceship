@@ -3,12 +3,18 @@ import curses
 import itertools
 from functools import partial
 import math
+from pathlib import Path
 import random
 import os
 import time
 
 from curses_tools import draw_frame, read_controls, get_frame_size
-from space_garbage import fly_garbage
+from explosion import explode
+from obstacles import show_obstacles, has_collision
+from physics import update_speed
+from space_garbage import fly_garbage, fill_orbit_with_garbage
+from utils import (sleep, obstacles, coroutines, obstacles_in_last_collisions,
+                   SPACESHIP_ANIMATION, show_game_over, draw_info_panel, count_time)
 
 SKY_FRAMES = [
     (20, curses.A_DIM),
@@ -19,6 +25,8 @@ SKY_FRAMES = [
 
 TIC_TIMEOUT = 0.1
 GARBAGE_ANIMATIONS_PATH = os.path.join('animations', 'garbage')
+SPACESHIP_HEIGHT, SPACESHIP_WIDTH = get_frame_size(SPACESHIP_ANIMATION[0])
+INFO_PANEL_HEIGHT, INFO_PANEL_WIDTH = 2, 55
 
 
 async def blink(canvas, row, column, symbol='*'):
@@ -26,15 +34,13 @@ async def blink(canvas, row, column, symbol='*'):
     while True:
         canvas.addstr(row, column, symbol)
         delay = random.randint(1, 30)
-        for i in range(delay):
-            await asyncio.sleep(0)
+        await sleep(delay)
         for duration, style in SKY_FRAMES:
             canvas.addstr(row, column, symbol, style)
-            for i in range(duration):
-                await asyncio.sleep(0)
+            await sleep(duration)
 
 
-async def fire(canvas, start_row, start_column, rows_speed=-0.3, columns_speed=0):
+async def fire(canvas, start_row, start_column, rows_speed=-2, columns_speed=0):
     """Display animation of a gun shot. Direction and speed can be specified."""
     row, column = start_row, start_column
 
@@ -59,8 +65,23 @@ async def fire(canvas, start_row, start_column, rows_speed=-0.3, columns_speed=0
         canvas.addstr(round(row), round(column), symbol)
         await asyncio.sleep(0)
         canvas.addstr(round(row), round(column), ' ')
+
+        for obstacle in obstacles:
+            if obstacle.has_collision(row, column):
+                obstacles_in_last_collisions.append(obstacle)
+                await explode(canvas, row, column)
+                return
+
         row += rows_speed
         column += columns_speed
+
+
+async def automate_fire(canvas, row, column, frame, fire_size=2):
+    for i in range(fire_size):
+        fire_start_y = row
+        fire_start_x = column + math.floor(SPACESHIP_WIDTH / 2)
+        coroutines.append(fire(canvas, fire_start_y, fire_start_x))
+        await asyncio.sleep(0)
 
 
 def keep_frame_inside_border(frame, row, column, canvas):
@@ -74,50 +95,51 @@ def keep_frame_inside_border(frame, row, column, canvas):
     return row, column
 
 
-async def animate_spaceship(canvas, spaceship_animation, row, column, rows_speed=1, columns_speed=1):
+async def animate_spaceship(canvas, spaceship_animation, row, column, rows_speed=0, columns_speed=0):
     """Display spaceship animation."""
     for frame in itertools.cycle(spaceship_animation):
         rows_direction, columns_direction, space_pressed = read_controls(canvas)
-        row += rows_direction * rows_speed
-        column += columns_direction * columns_speed
+        rows_speed, columns_speed = update_speed(rows_speed, columns_speed, rows_direction, columns_direction)
+        row += rows_speed
+        column += columns_speed
         row, column = keep_frame_inside_border(frame, row, column, canvas)
         draw_frame(canvas, row, column, frame)
+        if space_pressed:
+            coroutines.append(automate_fire(canvas, row, column, frame))
         await asyncio.sleep(0)
         draw_frame(canvas, row, column, frame, negative=True)
+        for obstacle in obstacles:
+            if obstacle.has_collision(row, column, SPACESHIP_HEIGHT, SPACESHIP_WIDTH):
+                await explode(canvas, row, column)
+                coroutines.append(show_game_over(canvas))
+                return
 
 
 def draw(canvas, spaceship_animation):
     curses.curs_set(False)
     canvas.nodelay(True)
-    max_y, max_x = curses.window.getmaxyx(canvas)
+    max_y, max_x = canvas.getmaxyx()
     symbols = '+*.:'
     stars_number = round(max_y * max_x / 50)
     spaceship_start_position = (max_y / 2, max_x / 2)
-    spaceship_start_frame = spaceship_animation[0]
-    spaceship_frame_width = get_frame_size(spaceship_start_frame)[1]
-    fire_start_x = spaceship_start_position[0] - 1
-    fire_start_y = spaceship_start_position[1] + math.floor(spaceship_frame_width / 2)
-    fire_start_position = (fire_start_x, fire_start_y)
 
-    # global coroutines
+    info_panel = canvas.derwin(INFO_PANEL_HEIGHT, INFO_PANEL_WIDTH, max_y - 4, 2)
+
     for i in range(stars_number):
-        coroutine = blink(
+        coroutines.append(blink(
             canvas,
             row=random.randint(1, max_y - 2),
             column=random.randint(1, max_x - 2),
             symbol=random.choice(symbols)
-        )
-        coroutines.append(coroutine)
-    coroutines.append(fire(canvas, *fire_start_position, rows_speed=-0.8))
+        ))
     coroutines.append(animate_spaceship(canvas, spaceship_animation,
-                                        *spaceship_start_position, rows_speed=5, columns_speed=5))
-    coroutines.append(fly_garbage(
-            canvas,
-            random.randint(1, max_x - 1),
-            '123\n789',
-            speed=0.5
-        )
-    )
+                                        *spaceship_start_position, rows_speed=0, columns_speed=0))
+    for i in range(12):
+        coroutines.append(fill_orbit_with_garbage(canvas, max_x))
+    coroutines.append(show_obstacles(canvas, obstacles))
+    coroutines.append(draw_info_panel(info_panel))
+    loop = asyncio.get_event_loop()
+    coroutines.append(count_time())
 
     while True:
         for coroutine in coroutines.copy():
@@ -132,15 +154,9 @@ def draw(canvas, spaceship_animation):
 
 
 def main():
-    with open('animations/spaceship_frame_1.txt') as file:
-        spaceship_frame_1 = file.read()
-    with open('animations/spaceship_frame_2.txt') as file:
-        spaceship_frame_2 = file.read()
-    spaceship_animation = (spaceship_frame_1, spaceship_frame_1, spaceship_frame_2, spaceship_frame_2)
     curses.update_lines_cols()
-    curses.wrapper(partial(draw, spaceship_animation=spaceship_animation))
+    curses.wrapper(partial(draw, spaceship_animation=SPACESHIP_ANIMATION))
 
 
 if __name__ == '__main__':
-    coroutines = []
     main()
