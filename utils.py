@@ -1,10 +1,10 @@
 import asyncio
+from typing import NamedTuple
 from pathlib import Path
 
 from curses_tools import draw_frame, get_centered_frame_coordinates
+from game_scenario import PHRASES
 from obstacles import Obstacle
-
-TIC_TIMEOUT = 0.1
 
 coroutines = []
 obstacles: list[Obstacle] = []
@@ -16,7 +16,13 @@ SPACESHIP_ANIMATION = (spaceship_frame_1, spaceship_frame_1, spaceship_frame_2, 
 
 GAME_OVER_PATH = Path('animations', 'game_over.txt')
 
+YEAR_DURATION = 15
 year = 1957
+
+
+class Gun(NamedTuple):
+    rows_speed: int
+    columns_speed: int
 
 
 async def sleep(duration: int):
@@ -35,11 +41,34 @@ async def show_game_over(canvas):
 async def count_time():
     global year
     while True:
-        await asyncio.sleep(1.5)
+        await sleep(YEAR_DURATION)
         year += 1
 
 
 async def draw_info_panel(canvas):
     while True:
-        canvas.addstr(1, 1, f'{year}')
+        info = f'Year {year}'
+        try:
+            message = PHRASES[year]
+        except KeyError:
+            message = ''
+        info = info if not message else f'{info} — {message}'
+        draw_frame(canvas, 1, 1, info)
         await asyncio.sleep(0)
+        draw_frame(canvas, 1, 1, info, negative=True)
+
+
+def choose_guns():
+    fire_size = 2 if year < 2020 else 3
+    if year < 2020:
+        guns = [Gun(rows_speed=-2, columns_speed=0)]
+    else:
+        guns = [
+            Gun(-2, 0),
+            Gun(-2, -1), Gun(-2, 1),
+            Gun(-2, -2), Gun(-2, 2),
+            Gun(-1, -2), Gun(-1, 2),
+            Gun(-1, -1), Gun(-1, 1),
+            Gun(0, -2), Gun(0, 2)
+        ]
+    return fire_size, guns

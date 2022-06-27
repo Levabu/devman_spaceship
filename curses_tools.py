@@ -21,7 +21,6 @@ def read_controls(canvas):
             # https://docs.python.org/3/library/curses.html#curses.window.getch
             break
 
-        # if pressed_key_code == UP_KEY_CODE:
         if pressed_key_code in (UP_KEY_CODE, ALT_UP_KEY_CODE):
             rows_direction = -1
 

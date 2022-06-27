@@ -3,18 +3,17 @@ import curses
 import itertools
 from functools import partial
 import math
-from pathlib import Path
 import random
-import os
 import time
 
 from curses_tools import draw_frame, read_controls, get_frame_size
 from explosion import explode
-from obstacles import show_obstacles, has_collision
+from obstacles import show_obstacles
 from physics import update_speed
-from space_garbage import fly_garbage, fill_orbit_with_garbage
+from space_garbage import fill_orbit_with_garbage
 from utils import (sleep, obstacles, coroutines, obstacles_in_last_collisions,
-                   SPACESHIP_ANIMATION, show_game_over, draw_info_panel, count_time)
+                   SPACESHIP_ANIMATION, show_game_over, draw_info_panel,
+                   count_time, choose_guns)
 
 SKY_FRAMES = [
     (20, curses.A_DIM),
@@ -24,7 +23,6 @@ SKY_FRAMES = [
 ]
 
 TIC_TIMEOUT = 0.1
-GARBAGE_ANIMATIONS_PATH = os.path.join('animations', 'garbage')
 SPACESHIP_HEIGHT, SPACESHIP_WIDTH = get_frame_size(SPACESHIP_ANIMATION[0])
 INFO_PANEL_HEIGHT, INFO_PANEL_WIDTH = 2, 55
 
@@ -76,11 +74,13 @@ async def fire(canvas, start_row, start_column, rows_speed=-2, columns_speed=0):
         column += columns_speed
 
 
-async def automate_fire(canvas, row, column, frame, fire_size=2):
+async def automate_fire(canvas, row, column):
+    fire_size, guns = choose_guns()
     for i in range(fire_size):
         fire_start_y = row
         fire_start_x = column + math.floor(SPACESHIP_WIDTH / 2)
-        coroutines.append(fire(canvas, fire_start_y, fire_start_x))
+        for gun in guns:
+            coroutines.append(fire(canvas, fire_start_y, fire_start_x, *gun))
         await asyncio.sleep(0)
 
 
@@ -105,7 +105,7 @@ async def animate_spaceship(canvas, spaceship_animation, row, column, rows_speed
         row, column = keep_frame_inside_border(frame, row, column, canvas)
         draw_frame(canvas, row, column, frame)
         if space_pressed:
-            coroutines.append(automate_fire(canvas, row, column, frame))
+            coroutines.append(automate_fire(canvas, row, column))
         await asyncio.sleep(0)
         draw_frame(canvas, row, column, frame, negative=True)
         for obstacle in obstacles:
@@ -126,23 +126,24 @@ def draw(canvas, spaceship_animation):
     info_panel = canvas.derwin(INFO_PANEL_HEIGHT, INFO_PANEL_WIDTH, max_y - 4, 2)
 
     for i in range(stars_number):
-        coroutines.append(blink(
-            canvas,
-            row=random.randint(1, max_y - 2),
-            column=random.randint(1, max_x - 2),
-            symbol=random.choice(symbols)
-        ))
+        coroutines.append(
+            blink(
+                canvas,
+                row=random.randint(1, max_y - 2),
+                column=random.randint(1, max_x - 2),
+                symbol=random.choice(symbols)
+            )
+        )
     coroutines.append(animate_spaceship(canvas, spaceship_animation,
                                         *spaceship_start_position, rows_speed=0, columns_speed=0))
-    for i in range(12):
-        coroutines.append(fill_orbit_with_garbage(canvas, max_x))
-    coroutines.append(show_obstacles(canvas, obstacles))
+    coroutines.append(fill_orbit_with_garbage(canvas, max_x))
+    # coroutines.append(show_obstacles(canvas, obstacles))  # for debug
     coroutines.append(draw_info_panel(info_panel))
-    loop = asyncio.get_event_loop()
     coroutines.append(count_time())
 
     while True:
-        for coroutine in coroutines.copy():
+        # for coroutine in coroutines.copy():
+        for coroutine in coroutines:
             try:
                 coroutine.send(None)
             except StopIteration:
