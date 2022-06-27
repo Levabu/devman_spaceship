@@ -142,7 +142,6 @@ def draw(canvas, spaceship_animation):
     coroutines.append(count_time())
 
     while True:
-        # for coroutine in coroutines.copy():
         for coroutine in coroutines:
             try:
                 coroutine.send(None)
