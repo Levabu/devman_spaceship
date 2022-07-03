@@ -1,15 +1,11 @@
 import asyncio
 from curses_tools import draw_frame
-import os
-from pathlib import Path
 from random import randint, choice
 
 from curses_tools import get_frame_size
 from game_scenario import get_garbage_delay_tics
 from obstacles import Obstacle
 from utils import coroutines, obstacles, obstacles_in_last_collisions, sleep, YEAR_DURATION
-
-GARBAGE_FRAMES = [Path('animations', 'garbage', file).read_text() for file in os.listdir(Path('animations', 'garbage'))]
 
 
 async def fly_garbage(canvas, column, garbage_frame, speed=0.5):
@@ -37,7 +33,7 @@ async def fly_garbage(canvas, column, garbage_frame, speed=0.5):
     del obstacle
 
 
-async def fill_orbit_with_garbage(canvas, max_x):
+async def fill_orbit_with_garbage(canvas, garbage_frames, max_x):
     while True:
         from utils import year
         delay = get_garbage_delay_tics(year)
@@ -49,6 +45,6 @@ async def fill_orbit_with_garbage(canvas, max_x):
         coroutines.append(fly_garbage(
             canvas,
             randint(1, max_x - 1),
-            garbage_frame=choice(GARBAGE_FRAMES),
-            speed=1
+            garbage_frame=choice(garbage_frames),
+            speed=randint(1, 3) / 2
         ))

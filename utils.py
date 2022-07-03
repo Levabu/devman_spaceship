@@ -1,6 +1,5 @@
 import asyncio
 from typing import NamedTuple
-from pathlib import Path
 
 from curses_tools import draw_frame, get_centered_frame_coordinates
 from game_scenario import PHRASES
@@ -9,12 +8,6 @@ from obstacles import Obstacle
 coroutines = []
 obstacles: list[Obstacle] = []
 obstacles_in_last_collisions: list[Obstacle] = []
-
-spaceship_frame_1 = Path('animations', 'spaceship_frame_1.txt').read_text()
-spaceship_frame_2 = Path('animations', 'spaceship_frame_2.txt').read_text()
-SPACESHIP_ANIMATION = (spaceship_frame_1, spaceship_frame_1, spaceship_frame_2, spaceship_frame_2)
-
-GAME_OVER_PATH = Path('animations', 'game_over.txt')
 
 YEAR_DURATION = 15
 year = 1957
@@ -26,15 +19,14 @@ class Gun(NamedTuple):
 
 
 async def sleep(duration: int):
-    for i in range(duration):
+    for _ in range(duration):
         await asyncio.sleep(0)
 
 
-async def show_game_over(canvas):
-    frame = GAME_OVER_PATH.read_text()
-    coordinates = get_centered_frame_coordinates(canvas, frame)
+async def show_game_over(canvas, game_over_frame):
+    coordinates = get_centered_frame_coordinates(canvas, game_over_frame)
     while True:
-        draw_frame(canvas, *coordinates, frame)
+        draw_frame(canvas, *coordinates, game_over_frame)
         await asyncio.sleep(0)
 
 
